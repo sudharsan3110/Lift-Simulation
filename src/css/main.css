@@ -1,0 +1,18 @@
+.box{
+    width: 50px;
+    height: 100px;
+    background-color: blue;
+    margin:10px
+}
+#boxContainer{
+    margin-top: 20px;
+    display: flex;
+    flex-wrap: wrap;
+
+}
+.floor{
+    border:solid 1px ;
+    margin-top: 50px;
+    margin-bottom: 60px;
+    padding: 0 200px 0 200px;
+}

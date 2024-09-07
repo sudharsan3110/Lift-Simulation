@@ -1,14 +1,16 @@
+// Lift class implementation
 class Lift {
     constructor(id) {
         this.id = id;
         this.currentFloor = 0;
         this.isMoving = false;
+        this.targetFloor = null;
         this.liftElement = this.createLiftElement();
         this.doorLeft = this.liftElement.querySelector(".door-left");
         this.doorRight = this.liftElement.querySelector(".door-right");
     }
 
-    createLiftElement(){
+    createLiftElement() {
         const liftDiv = document.createElement("div");
         liftDiv.classList.add("lift");
         liftDiv.id = `lift${this.id}`;
@@ -26,52 +28,67 @@ class Lift {
     }
 
     moveToFloor(requestedFloorNo) {
-        const numberOfFloorsTravelled = Math.abs(requestedFloorNo - this.currentFloor);
-        const liftTravelDuration = numberOfFloorsTravelled * 3000;
+        if (this.isMoving || this.currentFloor === requestedFloorNo) return;
 
-        this.liftElement.setAttribute("style", `transform: translateY(${-100 * requestedFloorNo}px);transition-duration:${liftTravelDuration}ms;`);
+        const numberOfFloorsTravelled = Math.abs(requestedFloorNo - this.currentFloor);
+        const liftTravelDuration = numberOfFloorsTravelled * 2500; 
+
+        console.log(`Lift ${this.id}: Moving to floor ${requestedFloorNo}`);
         this.isMoving = true;
+        this.targetFloor = requestedFloorNo;
         this.liftElement.dataset.isMoving = "true";
+        this.liftElement.style.transform = `translateY(${-100 * requestedFloorNo}px)`;
+        this.liftElement.style.transitionDuration = `${liftTravelDuration}ms`;
 
         setTimeout(() => {
             this.openDoors();
             setTimeout(() => {
                 this.closeDoors();
                 setTimeout(() => {
+                    console.log(`Lift ${this.id}: Arrived at floor ${requestedFloorNo}`);
+                    this.currentFloor = requestedFloorNo;
+                    this.targetFloor = null;
                     this.isMoving = false;
                     this.liftElement.dataset.isMoving = "false";
+                    this.liftElement.dataset.currentFloor = requestedFloorNo.toString();
+                    building.checkPendingRequests();
                 }, 2500);
             }, 2500);
         }, liftTravelDuration);
-
-        this.currentFloor = requestedFloorNo;
-        this.liftElement.dataset.currentFloor = requestedFloorNo.toString();
     }
 
     openDoors() {
-        this.doorLeft.setAttribute("style", "transform: translateX(-25px);transition-duration:2500ms");
-        this.doorRight.setAttribute("style", "transform: translateX(25px);transition-duration:2500ms");
+        console.log(`Lift ${this.id}: Opening doors`);
+        this.doorLeft.style.transform = "translateX(-25px)";
+        this.doorRight.style.transform = "translateX(25px)";
+        this.doorLeft.style.transitionDuration = "2500ms";
+        this.doorRight.style.transitionDuration = "2500ms";
     }
 
     closeDoors() {
-        this.doorLeft.setAttribute("style", "transform: translateX(0px);transition-duration:2500ms");
-        this.doorRight.setAttribute("style", "transform: translateX(0px);transition-duration:2500ms");
+        console.log(`Lift ${this.id}: Closing doors`);
+        this.doorLeft.style.transform = "translateX(0px)";
+        this.doorRight.style.transform = "translateX(0px)";
+        this.doorLeft.style.transitionDuration = "2500ms";
+        this.doorRight.style.transitionDuration = "2500ms";
     }
 }
 
+// Building class implementation
 class Building {
     constructor(floorCount, liftCount) {
         this.floorCount = floorCount;
         this.liftCount = liftCount;
         this.buildingElement = document.querySelector("#building");
         this.lifts = [];
+        this.pendingRequests = new Set();
         this.renderElement();
     }
 
     renderElement() {
         this.buildingElement.innerHTML = "";
-        for (let i = 0; i < this.floorCount; i++) {
-            const floorDiv = this.createFloorElement(this.floorCount - 1 - i);
+        for (let i = this.floorCount - 1; i >= 0; i--) {
+            const floorDiv = this.createFloorElement(i);
             this.buildingElement.appendChild(floorDiv);
         }
 
@@ -84,8 +101,7 @@ class Building {
             liftWrapper.appendChild(lift.liftElement);
         }
 
-        const firstFloor = document.querySelector("#floor0");
-        firstFloor.appendChild(liftWrapper);
+        this.buildingElement.appendChild(liftWrapper);
     }
 
     createFloorElement(floorNumber) {
@@ -109,7 +125,7 @@ class Building {
             upButton.classList.add("floor-button");
             upButton.id = `up-button${floorNumber}`;
             upButton.innerText = "up";
-            upButton.addEventListener("click", (e) => this.handleGoingUp(e));
+            upButton.addEventListener("click", () => this.handleLiftRequest(floorNumber));
             floorButtonsWrapper.appendChild(upButton);
         }
 
@@ -118,7 +134,7 @@ class Building {
             downButton.id = `down-button${floorNumber}`;
             downButton.classList.add("floor-button");
             downButton.innerText = "down";
-            downButton.addEventListener("click", (e) => this.handleGoingDown(e));
+            downButton.addEventListener("click", () => this.handleLiftRequest(floorNumber));
             floorButtonsWrapper.appendChild(downButton);
         }
 
@@ -128,39 +144,57 @@ class Building {
         return floorDiv;
     }
 
-    handleGoingUp(e) {
-        this.handleLiftRequest(e);
-    }
-
-    handleGoingDown(e) {
-        this.handleLiftRequest(e);
-    }
-
-    handleLiftRequest(e) {
-        const requestingFloorDiv = e.target.parentNode.parentNode.parentNode;
-        const requestedFloorNo = parseInt(requestingFloorDiv.id.split("floor")[1]);
-
-        for (const lift of this.lifts) {
-            if (!lift.isMoving) {
-                lift.moveToFloor(requestedFloorNo);
-                break;
-            }
+    handleLiftRequest(requestedFloorNo) {
+        if (this.isFloorBeingServiced(requestedFloorNo)) {
+            console.log(`Floor ${requestedFloorNo} is already being serviced or in queue.`);
+            return;
         }
+
+        console.log(`New request for floor ${requestedFloorNo}`);
+        this.pendingRequests.add(requestedFloorNo);
+        this.checkPendingRequests();
+    }
+
+    isFloorBeingServiced(floorNo) {
+        return this.pendingRequests.has(floorNo) || this.lifts.some(lift => lift.targetFloor === floorNo);
+    }
+
+    checkPendingRequests() {
+        if (this.pendingRequests.size === 0) return;
+
+        const availableLift = this.findAvailableLift();
+        if (!availableLift) {
+            console.log("No available lifts at the moment.");
+            return;
+        }
+
+        const nextFloor = this.pendingRequests.values().next().value;
+        this.pendingRequests.delete(nextFloor);
+        availableLift.moveToFloor(nextFloor);
+    }
+
+    findAvailableLift() {
+        return this.lifts.find(lift => !lift.isMoving);
     }
 }
 
-const generateButton = document.querySelector("#generate");
-const buildingContainer = document.querySelector("#buildingContainer");
 
-generateButton.addEventListener("click", () => {
-    const floorCount = parseInt(document.querySelector("#floorsInput").value);
-    const liftCount = parseInt(document.querySelector("#liftsInput").value);
+let building;
 
-    if (isNaN(floorCount) || isNaN(liftCount) || floorCount < 1 || liftCount < 1) {
-        alert("Please enter valid numbers for floors and lifts (minimum 1).");
-        return;
-    }
+document.addEventListener('DOMContentLoaded', () => {
+    const generateButton = document.querySelector("#generate");
+    const buildingContainer = document.querySelector("#buildingContainer");
 
-    buildingContainer.style.display = "block";
-    new Building(floorCount, liftCount);
+    generateButton.addEventListener("click", () => {
+        const floorCount = parseInt(document.querySelector("#floorsInput").value);
+        const liftCount = parseInt(document.querySelector("#liftsInput").value);
+
+        if (isNaN(floorCount) || isNaN(liftCount) || floorCount < 1 || liftCount < 1) {
+            alert("Please enter valid numbers for floors and lifts (minimum 1).");
+            return;
+        }
+
+        buildingContainer.style.display = "block";
+        building = new Building(floorCount, liftCount);
+    });
 });
